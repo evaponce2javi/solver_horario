@@ -9,6 +9,7 @@
 #include <cstddef>
 
 // ⫘⫘⫘ Consola ⫘⫘⫘
+void configurarConsola();   // en Windows fija la consola en UTF-8 (no-op en otros SO)
 void limpiarPantalla();
 void presioneTeclaParaContinuar();
 

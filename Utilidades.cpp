@@ -12,6 +12,10 @@
 #include <system_error>
 #include <regex>
 
+#ifdef _WIN32
+#include <windows.h>   // SetConsoleOutputCP / SetConsoleCP
+#endif
+
 // ⫘⫘⫘ Normalización interna (mayúsculas ASCII + acentos → base) ⫘⫘⫘
 namespace {
 
@@ -42,6 +46,16 @@ std::string normalizarTexto(const std::string& entrada) {
 } // namespace
 
 // ⫘⫘⫘ Consola portable ⫘⫘⫘
+void configurarConsola() {
+    // En Windows, la consola arranca en una code page heredada (p. ej. 850)
+    // que rompe los acentos UTF-8 del código. Forzarla a UTF-8 aquí evita
+    // depender de 'chcp 65001' y funciona igual en PowerShell, cmd o VS Code.
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);   // salida (lo que imprime el programa)
+    SetConsoleCP(CP_UTF8);         // entrada (lo que teclea el usuario)
+#endif
+}
+
 void limpiarPantalla() {
     // El 'if' consume el valor de retorno (evita -Wunused-result).
 #ifdef _WIN32
