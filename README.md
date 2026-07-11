@@ -116,3 +116,5 @@ g++ -std=c++17 -Wall -Wextra -O2 *.cpp -o horario
 - **Alineación UTF-8**: `std::setw` cuenta bytes, así que la `É` de `MIÉRCOLES`
   descuadraría la tabla. El render calcula el ancho **visible** (ignorando los
   bytes de continuación `10xxxxxx`) y rellena con espacios en consecuencia.
+
+*Licenciado bajo PolyForm Noncommercial 1.0.0 — uso libre no comercial, ver LICENSE.*
