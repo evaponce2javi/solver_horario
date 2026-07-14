@@ -9,11 +9,26 @@
 #include "Sesion.h"
 
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <string>
 #include <vector>
 
 namespace {
+
+// Tope de tablas impresas: con 5 ramos x 4 paralelos hay 1024 soluciones y
+// escupirlas todas a consola es inservible. Los criterios y el frente de
+// Pareto siguen calculándose sobre TODAS; el tope es solo de presentación.
+constexpr std::size_t MAX_TABLAS_MOSTRADAS = 50;
+
+// ⫘⫘⫘ Invalidación de resultados ⫘⫘⫘
+// Toda mutación del registro deja obsoletas las soluciones ya calculadas.
+// Sin esto, resolver → borrar una asignatura → "mostrar resultados" seguía
+// dibujando horarios con la asignatura eliminada.
+void invalidarSoluciones(EstadoApp& estado) {
+    estado.soluciones.clear();
+    estado.haResuelto = false;
+}
 
 // ⫘⫘⫘ Helpers de listado ⫘⫘⫘
 void listarAsignaturasConConteo(const Registro& registro) {
@@ -52,6 +67,7 @@ void opcionAnadirAsignatura(EstadoApp& estado) {
     }
 
     if (estado.registro.agregarAsignatura(sigla)) {
+        invalidarSoluciones(estado);
         std::cout << "Asignatura guardada con éxito.\n";
     } else {
         std::cout << "Aviso: la asignatura " << sigla << " ya existe en el registro.\n";
@@ -72,6 +88,7 @@ void opcionEliminarAsignatura(EstadoApp& estado) {
             trim(leerLinea("Ingrese la sigla de la asignatura a eliminar:")));
         int borrados = estado.registro.eliminarAsignatura(sigla);
         if (borrados >= 0) {
+            invalidarSoluciones(estado);
             std::cout << sigla << " eliminado con éxito junto con sus "
                       << borrados << " paralelos.\n";
             return;
@@ -165,6 +182,7 @@ void opcionAnadirParalelo(EstadoApp& estado) {
             Sesion sesion{dia, clave, online};
             Paralelo& paralelo = asignatura->obtenerOCrearParalelo(numero);
             paralelo.agregarSesion(sesion);
+            invalidarSoluciones(estado);
             std::cout << "Paralelo asignado con éxito: " << sigla << "-" << numero << "\n";
             return;
         }
@@ -207,15 +225,17 @@ void opcionEliminarParalelo(EstadoApp& estado) {
     }
 
     asignatura->eliminarParalelo(numero);
+    invalidarSoluciones(estado);
     std::cout << "Paralelo " << numero << " eliminado con éxito.\n";
 }
 
 // ⫘⫘⫘ Opción 5 — Resolver horario (CSP por fuerza bruta) ⫘⫘⫘
 void opcionResolver(EstadoApp& estado) {
-    estado.haResuelto = true;
-    estado.soluciones.clear();
+    invalidarSoluciones(estado);
 
     if (estado.registro.vacio()) {
+        // Ojo: NO se marca como "resuelto". Un registro vacío no es lo mismo
+        // que un registro sin solución posible.
         std::cout << "No hay asignaturas registradas. No se puede resolver.\n";
         return;
     }
@@ -223,6 +243,7 @@ void opcionResolver(EstadoApp& estado) {
     std::vector<std::string> excluidas;
     Solver solver;
     estado.soluciones = solver.resolver(estado.registro, excluidas);
+    estado.haResuelto = true;
 
     for (const auto& sigla : excluidas) {
         std::cout << "Aviso: la asignatura " << sigla
@@ -230,11 +251,19 @@ void opcionResolver(EstadoApp& estado) {
     }
 
     if (estado.soluciones.empty()) {
+        // Política "todo o nada": no se ofrecen asignaciones parciales.
         std::cout << "No se encontraron soluciones que cumplan las restricciones.\n";
     } else {
         std::cout << "Se encontraron " << estado.soluciones.size()
                   << " soluciones válidas.\n";
     }
+}
+
+// ⫘⫘⫘ Impresión de los puntajes de una solución ⫘⫘⫘
+void imprimirScores(const Solucion& solucion) {
+    std::cout << "[ventanas=" << solucion.scoreVentanas
+              << ", horario=" << std::fixed << std::setprecision(2)
+              << solucion.promedioClave() << std::defaultfloat << "]";
 }
 
 // ⫘⫘⫘ Opción 6 — Mostrar resultados ⫘⫘⫘
@@ -249,27 +278,66 @@ void opcionMostrarResultados(const EstadoApp& estado) {
     }
 
     const auto& sols = estado.soluciones;
-    std::cout << "Se han encontrado un total de " << sols.size() << " soluciones:\n\n";
+    std::cout << "Se han encontrado un total de " << sols.size() << " soluciones.\n"
+              << "Criterios (ambos se minimizan): ventanas = huecos; "
+              << "horario = promedio de clave (0 = 1-2 ... 6 = 13-14).\n\n";
 
-    // Las dos mejores por separado (no reordena el vector).
-    auto mejorVentanas = std::min_element(sols.begin(), sols.end(),
-        [](const Solucion& a, const Solucion& b) { return a.scoreVentanas < b.scoreVentanas; });
-    auto mejorHorario = std::min_element(sols.begin(), sols.end(),
-        [](const Solucion& a, const Solucion& b) { return a.scoreHorario < b.scoreHorario; });
+    // ⫘ Los dos óptimos, con desempate determinista (ver Solver::mejorPor*) ⫘
+    const auto& mejorVentanas = *std::min_element(sols.begin(), sols.end(),
+                                                  Solver::mejorPorVentanas);
+    const auto& mejorHorario  = *std::min_element(sols.begin(), sols.end(),
+                                                  Solver::mejorPorHorario);
 
-    std::cout << "(1) M E J O R   S O L U C I Ó N   V E N T A N A S:  (score = "
-              << mejorVentanas->scoreVentanas << ")\n";
-    dibujarHorario(*mejorVentanas);
+    std::cout << "(1) M E J O R   S O L U C I Ó N   V E N T A N A S:  ";
+    imprimirScores(mejorVentanas);
+    std::cout << "\n";
+    dibujarHorario(mejorVentanas);
 
-    std::cout << "\n(2) M E J O R   S O L U C I Ó N   H O R A R I O:  (score = "
-              << mejorHorario->scoreHorario << ")\n";
-    dibujarHorario(*mejorHorario);
+    std::cout << "\n(2) M E J O R   S O L U C I Ó N   H O R A R I O:  ";
+    imprimirScores(mejorHorario);
+    std::cout << "\n";
+    dibujarHorario(mejorHorario);
 
-    std::cout << "\nSoluciones que cumplen restricciones:\n";
-    for (std::size_t i = 0; i < sols.size(); ++i) {
-        std::cout << "\n( " << (i + 1) << " )  [ventanas=" << sols[i].scoreVentanas
-                  << ", horario=" << sols[i].scoreHorario << "]\n";
-        dibujarHorario(sols[i]);
+    // ⫘ Frente de Pareto: el trade-off explícito entre ambos criterios ⫘
+    // Son las soluciones donde no se puede mejorar un criterio sin empeorar
+    // el otro. Cualquier solución fuera del frente está dominada: existe otra
+    // igual o mejor en ambos, así que no hay razón para elegirla.
+    const std::vector<const Solucion*> frente = Solver::frentePareto(sols);
+    std::cout << "\n(3) F R E N T E   D E   P A R E T O:  "
+              << frente.size() << " soluciones no dominadas\n"
+              << "    (no se puede mejorar un criterio sin empeorar el otro)\n";
+    for (std::size_t i = 0; i < frente.size(); ++i) {
+        std::cout << "    " << (i + 1) << ") ";
+        imprimirScores(*frente[i]);
+        std::cout << "  " << frente[i]->firma << "\n";
+    }
+
+    // ⫘ Listado completo, ordenado y acotado ⫘
+    std::vector<const Solucion*> orden;
+    orden.reserve(sols.size());
+    for (const Solucion& s : sols) orden.push_back(&s);
+    std::sort(orden.begin(), orden.end(),
+              [](const Solucion* a, const Solucion* b) { return Solver::mejorPorVentanas(*a, *b); });
+
+    const std::size_t aMostrar = std::min(orden.size(), MAX_TABLAS_MOSTRADAS);
+    std::cout << "\n(4) Soluciones que cumplen restricciones "
+              << "(ordenadas por ventanas, luego horario):\n";
+    if (orden.size() > aMostrar) {
+        std::cout << "    Mostrando las " << aMostrar << " mejores de "
+                  << orden.size() << ".\n";
+    }
+
+    for (std::size_t i = 0; i < aMostrar; ++i) {
+        std::cout << "\n( " << (i + 1) << " )  ";
+        imprimirScores(*orden[i]);
+        std::cout << "\n";
+        dibujarHorario(*orden[i]);
+    }
+
+    if (orden.size() > aMostrar) {
+        std::cout << "\n... y " << (orden.size() - aMostrar)
+                  << " soluciones más (no mostradas). Agregue restricciones "
+                  << "o quite paralelos poco atractivos para acotar la búsqueda.\n";
     }
 }
 

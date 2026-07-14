@@ -14,11 +14,13 @@ const std::vector<Sesion>& Paralelo::sesiones() const { return sesiones_; }
 uint64_t Paralelo::mascara() const { return mascara_; }
 
 // ⫘⫘⫘ Unicidad de sesión ⫘⫘⫘
+// Solo las presenciales tienen unicidad: dos clases no pueden ocupar la misma
+// celda (día, clave). Las ONLINE no ocupan grid y jamás chocan, así que un
+// paralelo puede acumular tantas marcas ONLINE como sesiones remotas tenga.
 bool Paralelo::existeSesion(int dia, int clave, bool online) const {
+    if (online) return false;   // múltiples marcas online permitidas
     for (const Sesion& s : sesiones_) {
-        // Todas las marcas online colapsan a la misma clave lógica.
-        if (online && s.online) return true;
-        if (!online && !s.online && s.dia == dia && s.clave == clave) return true;
+        if (!s.online && s.dia == dia && s.clave == clave) return true;
     }
     return false;
 }

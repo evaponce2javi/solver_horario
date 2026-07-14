@@ -115,10 +115,13 @@ std::string leerLinea(const std::string& mensaje) {
     return linea;
 }
 
-// Entero estricto: rechaza "4x", "ICA-1", "abc", vacío.
+// Entero estricto NO negativo: rechaza "4x", "ICA-1", "abc", "-3", "+2", vacío.
 bool parsearEntero(const std::string& texto, int& salida) {
     std::string s = trim(texto);
     if (s.empty()) return false;
+    // Ningún dato del dominio (opción de menú, número de paralelo) es negativo,
+    // y std::from_chars aceptaría "-3" de buena gana. Se corta el signo antes.
+    if (s.front() == '-' || s.front() == '+') return false;
     int valor = 0;
     const char* ini = s.data();
     const char* fin = s.data() + s.size();

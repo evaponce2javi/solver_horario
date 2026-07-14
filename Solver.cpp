@@ -4,6 +4,7 @@
 
 #include "Solver.h"
 #include <array>
+#include <algorithm>
 
 // ⫘⫘⫘ Construcción de variables + arranque del backtracking ⫘⫘⫘
 std::vector<Solucion> Solver::resolver(const Registro& registro,
@@ -33,6 +34,7 @@ std::vector<Solucion> Solver::resolver(const Registro& registro,
 }
 
 // ⫘⫘⫘ DFS: única poda permitida = violación de la restricción dura ⫘⫘⫘
+// "Todo o nada": una solución solo se registra al asignar TODAS las variables.
 void Solver::backtrack(const std::vector<Variable>& variables, std::size_t indice,
                        std::vector<EleccionParalelo>& parcial, uint64_t mascaraAcum,
                        std::vector<Solucion>& soluciones) {
@@ -40,8 +42,9 @@ void Solver::backtrack(const std::vector<Variable>& variables, std::size_t indic
         Solucion solucion;
         solucion.elecciones       = parcial;
         solucion.mascaraCombinada = mascaraAcum;
+        solucion.firma            = firmaSolucion(parcial);
         solucion.scoreVentanas    = calcularVentanas(solucion);
-        solucion.scoreHorario     = calcularHorario(solucion);
+        calcularHorario(solucion);
         soluciones.push_back(std::move(solucion));
         return;
     }
@@ -93,13 +96,64 @@ int Solver::calcularVentanas(const Solucion& solucion) {
 }
 
 // ⫘⫘⫘ Score HORARIO ⫘⫘⫘
-// Suma de índices de clave de las sesiones presenciales. Menor = más mañana.
-int Solver::calcularHorario(const Solucion& solucion) {
-    int total = 0;
+// Guarda suma y cantidad de claves presenciales: el criterio es el PROMEDIO
+// (suma/cantidad), no la suma cruda. Menor promedio = clases más de mañana.
+// Con la suma cruda, un paralelo con UNA sesión tardía (clave 5 ⇒ 5) le ganaba
+// a uno con dos sesiones tempranas (claves 0 y 6 ⇒ 6), premiando "tener menos
+// clases" en vez de "tenerlas temprano". El promedio (5.0 vs 3.0) lo corrige.
+void Solver::calcularHorario(Solucion& solucion) {
+    int suma     = 0;
+    int cantidad = 0;
     for (const auto& eleccion : solucion.elecciones) {
         for (const Sesion& s : eleccion.sesiones) {
-            if (!s.online) total += s.clave;
+            if (!s.online) { suma += s.clave; ++cantidad; }   // las online no cuentan
         }
     }
-    return total;
+    solucion.sumaClaves           = suma;
+    solucion.sesionesPresenciales = cantidad;
+}
+
+// ⫘⫘⫘ Órdenes totales (desempate determinista) ⫘⫘⫘
+bool Solver::mejorPorVentanas(const Solucion& a, const Solucion& b) {
+    if (a.scoreVentanas != b.scoreVentanas) return a.scoreVentanas < b.scoreVentanas;
+    const int c = compararHorario(a, b);           // desempate 1: el otro criterio
+    if (c != 0) return c < 0;
+    return a.firma < b.firma;                      // desempate 2: firma canónica
+}
+
+bool Solver::mejorPorHorario(const Solucion& a, const Solucion& b) {
+    const int c = compararHorario(a, b);
+    if (c != 0) return c < 0;
+    if (a.scoreVentanas != b.scoreVentanas) return a.scoreVentanas < b.scoreVentanas;
+    return a.firma < b.firma;
+}
+
+// ⫘⫘⫘ Dominancia de Pareto ⫘⫘⫘
+bool Solver::domina(const Solucion& a, const Solucion& b) {
+    const int cmpHorario  = compararHorario(a, b);
+    const bool noPeorVent = a.scoreVentanas <= b.scoreVentanas;
+    const bool noPeorHor  = cmpHorario <= 0;
+    const bool mejorAlgo  = (a.scoreVentanas < b.scoreVentanas) || (cmpHorario < 0);
+    return noPeorVent && noPeorHor && mejorAlgo;
+}
+
+// ⫘⫘⫘ Frente de Pareto por barrido (skyline) ⫘⫘⫘
+// Ordenando por (ventanas ↑, horario ↑), una solución es no dominada si y solo
+// si su horario mejora ESTRICTAMENTE al mejor horario visto hasta el momento.
+// O(n log n) en vez de comparar todos contra todos, O(n²).
+std::vector<const Solucion*> Solver::frentePareto(const std::vector<Solucion>& soluciones) {
+    std::vector<const Solucion*> orden;
+    orden.reserve(soluciones.size());
+    for (const Solucion& s : soluciones) orden.push_back(&s);
+
+    std::sort(orden.begin(), orden.end(),
+              [](const Solucion* a, const Solucion* b) { return mejorPorVentanas(*a, *b); });
+
+    std::vector<const Solucion*> frente;
+    for (const Solucion* s : orden) {
+        if (frente.empty() || compararHorario(*s, *frente.back()) < 0) {
+            frente.push_back(s);   // nadie anterior la domina
+        }
+    }
+    return frente;
 }

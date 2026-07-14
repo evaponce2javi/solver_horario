@@ -21,7 +21,7 @@ std::string centrar(const std::string& texto, std::size_t ancho);
 
 // ⫘⫘⫘ Entrada ⫘⫘⫘
 std::string leerLinea(const std::string& mensaje);   // imprime mensaje + "> "
-bool        parsearEntero(const std::string& texto, int& salida);
+bool        parsearEntero(const std::string& texto, int& salida);  // enteros NO negativos
 
 // ⫘⫘⫘ Validaciones de dominio ⫘⫘⫘
 bool esSiglaValida(const std::string& sigla);        // ^[A-Z]{3}[0-9]{4}$

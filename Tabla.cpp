@@ -38,12 +38,16 @@ void dibujarHorario(const Solucion& solucion) {
 
     std::vector<std::string> online;
     for (const auto& eleccion : solucion.elecciones) {
-        bool tieneOnline = false;
+        int cuantasOnline = 0;   // un paralelo puede tener varias sesiones remotas
         for (const Sesion& s : eleccion.sesiones) {
-            if (s.online) tieneOnline = true;
+            if (s.online) ++cuantasOnline;
             else          grilla[s.clave][s.dia] = etiquetaEleccion(eleccion);
         }
-        if (tieneOnline) online.push_back(etiquetaEleccion(eleccion));
+        if (cuantasOnline > 0) {
+            std::string etiqueta = etiquetaEleccion(eleccion);
+            if (cuantasOnline > 1) etiqueta += " (x" + std::to_string(cuantasOnline) + ")";
+            online.push_back(etiqueta);
+        }
     }
 
     // ⫘⫘⫘ 2) Calcular anchos (por ancho VISIBLE, no por bytes) ⫘⫘⫘

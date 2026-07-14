@@ -5,6 +5,9 @@
 //             Variables = asignaturas, dominio = paralelos, restricción
 //             dura = no compartir celda (AND de máscaras). La optimización
 //             SOLO ordena; nunca poda soluciones válidas.
+//
+//  Política "todo o nada": si alguna asignatura no puede encajar, NO se
+//  devuelve una solución parcial; simplemente no hay solución.
 // ⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘⫘
 
 #include "Registro.h"
@@ -21,9 +24,24 @@ public:
     std::vector<Solucion> resolver(const Registro& registro,
                                    std::vector<std::string>& excluidas);
 
-    // Funciones de optimización (se minimizan, se evalúan por separado).
-    static int calcularVentanas(const Solucion& solucion);
-    static int calcularHorario(const Solucion& solucion);
+    // ⫘⫘⫘ Funciones de optimización (ambas se minimizan) ⫘⫘⫘
+    static int  calcularVentanas(const Solucion& solucion);
+    static void calcularHorario(Solucion& solucion);   // llena suma/cantidad
+
+    // ⫘⫘⫘ Órdenes totales y deterministas ⫘⫘⫘
+    // Desempate lexicográfico: criterio principal → criterio secundario →
+    // firma canónica. Así el "mejor" ya NO depende del orden de enumeración.
+    static bool mejorPorVentanas(const Solucion& a, const Solucion& b);
+    static bool mejorPorHorario (const Solucion& a, const Solucion& b);
+
+    // ⫘⫘⫘ Trade-off entre los dos criterios ⫘⫘⫘
+    // a domina a b  ⟺  a es ≤ en ambos criterios y < en al menos uno.
+    static bool domina(const Solucion& a, const Solucion& b);
+
+    // Soluciones NO dominadas (frente de Pareto): en ellas no se puede mejorar
+    // un criterio sin empeorar el otro. Barrido O(n log n), no O(n²).
+    // Los punteros apuntan a 'soluciones'; no sobrevivas al vector original.
+    static std::vector<const Solucion*> frentePareto(const std::vector<Solucion>& soluciones);
 
 private:
     struct Variable {

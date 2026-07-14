@@ -21,8 +21,29 @@ ordena las soluciones según dos criterios de optimización independientes.
 
 1. **Ventanas** — por día, la corrida vacía más larga que tiene clase antes y
    después; se suma esa ventana máxima de los 5 días.
-2. **Horario** — suma de los índices de clave (0–6) de todas las sesiones
-   presenciales. Menor suma = clases más de mañana. Las online no cuentan.
+2. **Horario** — **promedio** de los índices de clave (0–6) de las sesiones
+   presenciales. Menor promedio = clases más de mañana. Las online no cuentan.
+   Se usa el promedio y no la suma porque la suma premiaba a los paralelos con
+   *menos* sesiones en vez de a los que tienen clases *más temprano*: con suma,
+   un paralelo de una sola sesión en la clave `11-12` (5) le ganaba a uno con
+   dos sesiones en `1-2` y `13-14` (0 + 6 = 6). Con promedio, 5.0 vs 3.0, gana
+   el correcto. La comparación es **exacta con enteros** (multiplicación
+   cruzada `sumaA·nB` vs `sumaB·nA`), sin flotantes ni epsilons.
+
+### Desempates y trade-off
+
+- **Orden total determinista**: cada criterio desempata por el *otro* criterio y,
+  si aún hay empate, por la **firma canónica** de la solución (`ICI4150-2|ICI4247-1`).
+  El "mejor" ya no depende del orden en que el backtracking enumeró.
+- **Frente de Pareto**: se listan las soluciones **no dominadas** — aquellas en las
+  que no se puede mejorar un criterio sin empeorar el otro. Todo lo que queda fuera
+  del frente está dominado por alguna otra solución igual o mejor en *ambos*
+  criterios, así que no hay razón para elegirlo. Se calcula por barrido (skyline)
+  en O(n log n), no comparando todos contra todos. Deliberadamente **no** se combinan
+  los criterios en un score ponderado: eso obligaría a inventar un "tipo de cambio"
+  arbitrario entre horas muertas y clases temprano.
+- **Todo o nada**: si no existe una asignación completa (un paralelo por cada
+  asignatura), no hay solución. No se devuelven horarios parciales.
 
 ### Días y claves
 
@@ -37,6 +58,8 @@ ordena las soluciones según dos criterios de optimización independientes.
 | | | | 13-14 | 6 |
 
 `ONLINE` es una clave especial: no ocupa ninguna celda del grid y jamás choca.
+Un paralelo puede tener **varias** sesiones ONLINE (la unicidad `(día, clave)`
+solo rige para las presenciales).
 
 ## Estructura del proyecto
 
@@ -100,12 +123,17 @@ g++ -std=c++17 -Wall -Wextra -O2 *.cpp -o horario
 ```
 1. Añadir asignatura      (valida ^[A-Z]{3}[0-9]{4}$, ej. ICI4247)
 2. Eliminar asignatura    (borra la asignatura y todos sus paralelos)
-3. Añadir paralelo        (paralelo multi-sesión; acepta ONLINE)
+3. Añadir paralelo        (paralelo multi-sesión; acepta varias ONLINE)
 4. Eliminar paralelo
 5. Resolver horario       (CSP por fuerza bruta, guarda TODAS las soluciones)
-6. Mostrar resultados     (mejor por ventanas, mejor por horario, y todas)
+6. Mostrar resultados     (mejor por ventanas, mejor por horario, frente de
+                           Pareto, y el listado ordenado — máx. 50 tablas)
 0. Salir
 ```
+
+Cualquier mutación del registro (opciones 1–4) **invalida** las soluciones ya
+calculadas, para que la opción 6 nunca muestre horarios con asignaturas o
+paralelos que ya fueron eliminados.
 
 ## Notas de diseño
 
@@ -113,6 +141,11 @@ g++ -std=c++17 -Wall -Wextra -O2 *.cpp -o horario
   es un simple `(a & b) != 0`, O(1).
 - **`std::map`** para asignaturas y paralelos: da orden (lexicográfico /
   ascendente) gratis para todos los listados y unicidad de la clave.
+- **Tope de impresión**: la opción 6 dibuja como máximo **50 tablas** (las mejores
+  por ventanas y luego horario). Los criterios y el frente de Pareto se calculan
+  siempre sobre *todas* las soluciones; el tope es solo de presentación.
+- **Entrada numérica**: `parsearEntero` rechaza negativos y signo explícito — no hay
+  ningún dato del dominio (opción de menú, número de paralelo) que pueda ser < 0.
 - **Alineación UTF-8**: `std::setw` cuenta bytes, así que la `É` de `MIÉRCOLES`
   descuadraría la tabla. El render calcula el ancho **visible** (ignorando los
   bytes de continuación `10xxxxxx`) y rellena con espacios en consecuencia.

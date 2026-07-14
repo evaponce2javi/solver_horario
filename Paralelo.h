@@ -21,7 +21,8 @@ public:
     // Agrega una sesión. Retorna false si ya existía (no duplica).
     bool agregarSesion(const Sesion& sesion);
 
-    // Unicidad = (día, clave) para presenciales; una sola marca online.
+    // Unicidad = (día, clave), y SOLO para sesiones presenciales.
+    // Las sesiones ONLINE no ocupan grid: se admiten varias por paralelo.
     bool existeSesion(int dia, int clave, bool online) const;
 
 private:
